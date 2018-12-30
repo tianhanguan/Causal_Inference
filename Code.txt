@@ -1,0 +1,154 @@
+#Import the modules
+#!pip install matplotlib_venn
+#pip! install seaborn
+%matplotlib inline
+import matplotlib_venn as vplt
+from matplotlib import pyplot as plt
+import seaborn as sns
+from numpy import random
+from causalgraphicalmodels import CausalGraphicalModel
+import causalgraphicalmodels
+from causalgraphicalmodels.examples import fork, chain, collider
+
+#Draw a chain, fork, and collider structure
+chain.draw()
+fork.draw()
+collider.draw()
+###############################################
+###############################################
+##Example 1 Illustrate the concept of d-separation
+#Create and draw the Bayes net
+path = CausalGraphicalModel(
+    nodes = ["x1", "x2", "x3", "x4", "x5","x6","x7"],
+    edges = [("x1", "x6"), ("x1", "x2"), ("x1", "x3"), ("x2", "x4"), ("x3", "x5"), ("x4", "x6"), ("x5", "x6"),("x6", "x7")]
+)
+path.draw()
+
+#Confirm whether the following conditional independence relationships are true or not
+path.is_d_separated("x1", "x4", {"x2"})
+path.is_d_separated("x1", "x4", {"x2","x6"})
+path.is_d_separated("x1", "x4", {"x2","x7"})
+path.is_d_separated("x1", "x4", {})
+##############################################
+###############################################
+##Example 2 Illustrate the concept of backdoor criterion
+#Create and draw the Bayes net
+path = CausalGraphicalModel(
+    nodes = ["x1", "x2", "x3", "x4", "x5","x6","x7","x8","x9","x10"],
+    edges = [("x2", "x4"), ("x2", "x5"), ("x3", "x5"), ("x4", "x6"), ("x5", "x7"), ("x6", "x8"),("x7", "x9"),
+	     ("x8", "x10"),("x9", "x10"),("x3", "x5"),("x1", "x10"),("x3", "x10"),("x4", "x9"),("x5", "x8")]
+)
+path.draw()
+
+#Find all backdoor paths from x5 to x9
+path.get_all_backdoor_paths("x5", "x9")
+
+#Get all sets of variables that satisfy the backdoor criterion
+path.get_all_backdoor_adjustment_sets("x5", "x9")
+##############################################
+###############################################
+##Example 3 Simpson's paradox
+#Frist simulate the dataset
+random.seed(1234) #set the random seed
+
+#Simulate Z
+Z = random.binomial(n=1, p=0.5, size=2000) 
+#sum(Z)
+
+#Simulate X based on Z
+X = random.binomial(n=1, p=9/10-4/5*Z, size=2000) + 1
+#sum(X)
+
+#Simulate Y based on X and Z
+mu, sigma = X+2*Z, 2
+Y = random.normal(mu, sigma, size=2000)
+
+#Converts X, Y, Z into a dataframe
+from pandas import DataFrame
+df1 = DataFrame({'Advertising strategy':X, 'Increase in sales (%)': Y})
+df2 = DataFrame({'Gender':Z, 'Advertising strategy':X, 'Increase in sales (%)': Y})
+###################
+#1. Perform analysis using the aggregated data (df1)
+sns.boxplot(x = 'Advertising strategy', y = 'Increase in sales (%)', data=df1)
+plt.title("Increase in sales (%) vs Advertising strategy")
+plt.show()
+
+sns.violinplot(x = 'Advertising strategy', y = 'Increase in sales (%)', data=df1)
+plt.title("Increase in sales (%) vs Advertising strategy")
+plt.show()
+
+df1.groupby('Advertising strategy').mean()
+##################
+#2. Perform analysis using the segragated data (df2)
+sns.boxplot(x='Advertising strategy', y='Increase in sales (%)', data=df2[df2['Gender'] == 0])
+plt.title("Increase in sales (%) vs Advertising strategy for Males")
+plt.show()
+sns.boxplot(x='Advertising strategy', y='Increase in sales (%)', data=df2[df2['Gender'] == 1])
+plt.title("Increase in sales (%) vs Advertising strategy for Females")
+plt.show()
+
+sns.violinplot(x='Advertising strategy', y='Increase in sales (%)', data=df2[df2['Gender'] == 0])
+plt.title("Increase in sales (%) vs Advertising strategy for Males")
+plt.show()
+sns.violinplot(x='Advertising strategy', y='Increase in sales (%)', data=df2[df2['Gender'] == 1])
+plt.title("Increase in sales (%) vs Advertising strategy for Females")
+plt.show()
+
+df2.groupby(['Gender', 'Advertising strategy']).mean()
+##################
+#3. Decide the right decision using a causal graph
+#Create and draw the causal graph
+path = CausalGraphicalModel(
+    nodes = ["Gender", "Strategy", "Increase in sales"],
+    edges = [("Gender", "Strategy"), ("Gender", "Increase in sales"), ("Strategy", "Increase in sales")]
+)
+path.draw()
+
+#Obtain the backdoor path
+path.get_all_backdoor_paths("Strategy", "Increase in sales")
+
+#Whether Gender satisfies the backdoor criterion
+path.is_valid_backdoor_adjustment_set("Strategy", "Increase in sales", {"Gender"}) #TRUE
+##############################################
+###############################################
+##Example 4 Birth-weight paradox
+#Create and draw the causal graph
+path = CausalGraphicalModel(
+    nodes = ["Smoking mother", "Low birth weight", "Increased mortality rate","Poor maternal nutrition"],
+    edges = [("Smoking mother", "Increased mortality rate"), ("Smoking mother", "Low birth weight"), 
+	     ("Low birth weight", "Increased mortality rate"),("Poor maternal nutrition","Low birth weight"),
+	     ("Poor maternal nutrition","Increased mortality rate")]
+)
+path.draw()
+
+#Obtain the backdoor path
+path.get_all_backdoor_paths("Smoking mother", "Increased mortality rate")
+##############################################
+###############################################
+##Example 5 Berkson's selection bias
+#Illustrate the data using a Venn diagram
+v = vplt.venn2(subsets = {'10':540,'01':40,'11':60},set_labels=('Living on campus','Passsed the course'),
+    set_colors=('b','g'),alpha=0.5)
+plt.show()
+
+#Create and draw the causal graph
+path = CausalGraphicalModel(
+    nodes = ["Performance", "Living on campus", "Sampling design"],
+    edges = [("Performance", "Sampling design"), ("Living on campus", "Sampling design")]
+)
+path.draw()
+
+#obtain the backdoor path
+path.get_all_backdoor_paths("Performance", "Living on campus")
+################################################################################################
+################################################################################################
+##Example 6 Unmeasured confounder and frontdoor adjustment
+#Create and draw the causal graph
+path = CausalGraphicalModel(
+    nodes=["Lack of sleep", "Heart attack", "Sudden death","Weekend activity"],
+    edges=[("Lack of sleep", "Heart attack"), ("Heart attack", "Sudden death"), 
+	   ("Weekend activity", "Lack of sleep"),("Weekend activity", "Sudden death")],
+)
+
+path.draw()
+
